@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Mouse.h>
 
-const int BUTTON_PIN = 12;
+const int BUTTON_PIN = 2;
 const int BUTTON_PUSH_INTERVAL = 500; // millisecond
 const int LOOP_DELAY = 20;
 const int MOUSE_MOVE_DISTANCE = 200; // pixel
