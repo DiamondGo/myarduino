@@ -1,5 +1,7 @@
-#include <Arduino.h>
+#define DEBUG 1
+#include <my/debug.h>
 
+#include <Arduino.h>
 /*
  * Unblocking version of Blink
  */
@@ -7,7 +9,7 @@
 bool on;
 unsigned long myTime;
 
-unsigned long interval = 2000L;
+unsigned long interval = 15000L;
 
 bool lastIsHigh;
 int buttonPin = A5;
@@ -43,13 +45,13 @@ void loop()
         {
             // digitalWrite(LED_BUILTIN, HIGH);
             digitalWrite(buttonPin, HIGH);
-            Serial.println("Turn light on");
+            DPL("Turn light on");
         }
         else
         {
             // digitalWrite(LED_BUILTIN, LOW);
             digitalWrite(buttonPin, LOW);
-            Serial.println("Turn light off");
+            DPL("Turn light off");
         }
     }
 
