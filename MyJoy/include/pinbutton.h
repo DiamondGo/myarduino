@@ -1,34 +1,34 @@
-#ifndef PINBUTTON_H
-#define PINBUTTON_H
+#ifndef _PINBUTTON_H_
+#define _PINBUTTON_H_
 
 #include "Arduino.h"
 #include "function_objects.h"
 
 typedef int Pin;
 
-enum PinEventType {
-    Pushed,     // connect
-    Released    // disconnect
+enum SimpleEventType
+{
+    Pushed,  // connect
+    Released // disconnect
 };
 
-typedef struct {
+typedef struct
+{
     Pin pin;
-    PinEventType type;
+    SimpleEventType type;
 } PinEvent;
-
 
 const Pin MAX_PIN = A5;
 
 void setupPinButtons();
 
 bool pinExist(Pin pin);
-const char * getPinName(Pin pin);
+const char *getPinName(Pin pin);
 int getPinState(Pin pin);
 void setPinState(Pin pin, int vol);
 
-typedef void (*EventHandle)(Pin, PinEventType);
+typedef void (*EventHandle)(Pin, SimpleEventType);
 void processPinEvent(EventHandle handle);
-void processPinEvent(FunctionObject<void(Pin, PinEventType)> handle);
+void processPinEvent(FunctionObject<void(Pin, SimpleEventType)> handle);
 
-//typedef void (*printer_t)(int);
 #endif

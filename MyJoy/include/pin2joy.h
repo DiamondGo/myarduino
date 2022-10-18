@@ -1,14 +1,40 @@
-#ifndef PIN2JOY_H
-#define PIN2JOY_H
+#ifndef _PIN2JOY_H_
+#define _PIN2JOY_H_
 
 #include "pinbutton.h"
 #include "Joystick.h" // https://github.com/MHeironimus/ArduinoJoystickLibrary
 
 extern Joystick_ Joystick;
-typedef PinEventType ButtonEventType;
+typedef SimpleEventType ButtonEventType;
 
-enum JoyPin {
-    Button1 = 2,
+enum JoyButton
+{
+    Button1 = 6,
+    Button2 = 7,
+    Button3 = 11,
+    Button4 = 4,
+    Button5 = 5,
+    Button6 = 10,
+    Button7 = 13,
+    Button8 = 12,
+    UP = A5,
+    DOWN = A4,
+    LEFT = A3,
+    RIGHT = A2,
+    SELECT = 3,
+    START = 2,
+    FUNC1 = 8,
+    FUNC2 = 9,
+    MAX_BUTTON = MAX_PIN,
+};
+
+inline JoyButton Pin2Button(Pin pin)
+{
+    return JoyButton(pin);
+}
+
+static const JoyButton ButtonList[] = {
+    Button1,
     Button2,
     Button3,
     Button4,
@@ -16,17 +42,17 @@ enum JoyPin {
     Button6,
     Button7,
     Button8,
-    Button9,
-    Button10,
-    Button11,
-    Button12,
-    UP = A0,
-    DOWN = A1,
-    LEFT = A2,
-    RIGHT = A3,
-};
+    UP,
+    DOWN,
+    LEFT,
+    RIGHT,
+    SELECT,
+    START,
+    FUNC1,
+    FUNC2,
+    };
 
-void setupJoyStick();
-typedef void (*JoystickHandle)(JoyPin, ButtonEventType);
+typedef void (*JoystickHandle)(JoyButton, ButtonEventType);
 void processButton();
+
 #endif

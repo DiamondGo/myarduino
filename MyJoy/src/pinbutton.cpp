@@ -1,5 +1,6 @@
 #include "Arduino.h"
 #include "pinbutton.h"
+#include "pin2joy.h"
 
 static const char *PIN_NAME[] = {
     "", "",
@@ -26,42 +27,50 @@ void setupPinButtons()
     }
 }
 
-bool pinExist(Pin pin) {
+bool pinExist(Pin pin)
+{
     return strlen(PIN_NAME[pin]) > 0;
 }
 
-const char * getPinName(Pin pin) {
+const char *getPinName(Pin pin)
+{
     return PIN_NAME[pin];
 }
 
-int getPinState(Pin pin) {
+int getPinState(Pin pin)
+{
     return PIN_STATE[pin];
 }
 
-void setPinState(Pin pin, int vol) {
+void setPinState(Pin pin, int vol)
+{
     PIN_STATE[pin] = vol;
 }
 
-void processPinEvent(EventHandle handle) {
-    processPinEvent([=](Pin pin, PinEventType eventType){
-        handle(pin, eventType);
-    });
+void processPinEvent(EventHandle handle)
+{
+    processPinEvent([=](Pin pin, SimpleEventType eventType)
+                    { handle(pin, eventType); });
 }
 
-void processPinEvent(FunctionObject<void(Pin, PinEventType)> handle) {
-    if (!setupOnce) {
+void processPinEvent(FunctionObject<void(Pin, SimpleEventType)> handle)
+{
+    if (!setupOnce)
+    {
         setupPinButtons();
     }
 
-    for (Pin pin = 0; pin <= MAX_PIN; pin++)
+    for (JoyButton button : ButtonList)
+    // for (Pin pin = 0; pin <= MAX_PIN; pin++)
     {
+        auto pin = Pin(button);
         if (pinExist(pin))
         {
             int pinState = digitalRead(pin);
             if (pinState != getPinState(pin))
             {
                 setPinState(pin, pinState);
-                PinEventType event = (pinState == HIGH) ? Released : Pushed;
+                SimpleEventType event = (pinState == HIGH) ? Released : Pushed;
                 handle(pin, event);
             }
         }

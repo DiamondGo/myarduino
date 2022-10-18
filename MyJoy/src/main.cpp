@@ -1,31 +1,41 @@
-/**
- * 
- */
-#define DEBUG 1
-#include <my/debug.h>
+#define LOG LEVEL_TRACE
+#include <my/log.h>
 
 #include "Arduino.h"
 #include "Joystick.h"
-#include "utilities.h"
-#include "pinbutton.h"
+#include "joybutton.h"
+#include "ArduinoSTL.h"
 
-/*
-Joystick_ Joystick(JOYSTICK_DEFAULT_REPORT_ID, 
-  JOYSTICK_TYPE_JOYSTICK, 32, 0,
-  true, true, false, false, false, false,
-  false, false, false, false, false);
-*/
+using namespace std;
+
 void setup()
 {
+#if LOG <= LEVEL_ERROR
     Serial.begin(4800);
+#endif
+
+    StickMachine::setupJoyStick();
 }
 
 void loop()
 {
     long now = millis();
-    
-    processPinEvent([=](Pin pin, PinEventType eventType){
-        //pf("pin %s changed to state %s at %ld", getPinName(pin), eventType == Pushed ? "Pushed" : "Released", now);
-        DP("pin", getPinName(pin), "changed to state", eventType == Pushed ? "Pushed" : "Released", "at", now);
-    });
+
+    vector<ButtonEvent> buttonEvents;
+
+    processPinEvent(
+        [&](Pin pin, SimpleEventType eventType)
+        {
+            TRACE("pin", getPinName(pin), "changed to state", eventType == Pushed ? "Pushed" : "Released", "at", now);
+            JoyButton butt = Pin2Button(pin);
+            // DEBUG("pin", pin, "to button", butt);
+            ButtonState::get(butt)->handleEvent(now, eventType, buttonEvents);
+        });
+
+    if (buttonEvents.empty())
+    {
+        return;
+    }
+
+    StickMachine::handleEvents(buttonEvents);
 }
