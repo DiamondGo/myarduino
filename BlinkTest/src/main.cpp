@@ -1,5 +1,5 @@
-#define DEBUG 1
-#include <my/debug.h>
+#define LOG LEVEL_DEBUG
+#include <my/log.h>
 
 #include <Arduino.h>
 /*
@@ -44,12 +44,12 @@ void loop()
         if (on)
         {
             digitalWrite(buttonPin, HIGH);
-            DPL("Turn light on");
+            DEBUG("Turn light on");
         }
         else
         {
             digitalWrite(buttonPin, LOW);
-            DPL("Turn light off");
+            DEBUG("Turn light off");
         }
     }
 
