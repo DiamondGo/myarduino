@@ -2,70 +2,77 @@
 #include "my/log.h"
 #include "joybutton.h"
 
-ButtonState *ButtonState::states[MAX_BUTTON + 1];
 
-ButtonState::ButtonState(JoyButton button)
+ButtonState::ButtonState()
 {
-    this->button = button;
-}
-
-void ButtonState::init()
-{
-    for (auto button : ButtonList)
+    for (auto jb : ButtonList)
     {
-        states[button] = new ButtonState(button);
+        buttons[jb] = new ButtonInfo();
     }
 }
 
-ButtonState *ButtonState::get(JoyButton button)
+ButtonState::~ButtonState()
 {
-    return states[button];
+    for (auto jb : ButtonList)
+    {
+        delete buttons[jb];
+    }
 }
 
-bool ButtonState::isHolding() const
+bool ButtonState::isHolding(JoyButton jb) const
 {
-    return downTime > 0;
+    return buttons[jb]->lastPressed > 0;
 }
 
-bool ButtonState::isTurbo() const
-{
-    return false;
-}
-
-bool ButtonState::hasMacro() const
+bool ButtonState::isTurbo(JoyButton jb) const
 {
     return false;
 }
 
-void ButtonState::handleEvent(long timeInMS, SimpleEventType event, vector<ButtonEvent> &output)
+bool ButtonState::hasMacro(JoyButton jb) const
+{
+    return false;
+}
+
+void ButtonState::handleEvent(long timeInMS, JoyButton jb, SimpleEventType event, vector<ButtonEvent> &output)
 {
     DEBUG("ButtonState handleEvent:", this->button);
     output.push_back(
         ButtonEvent{
             timeInMS,
-            this->button,
+            jb,
             event});
 }
 
-Joystick_ StickMachine::joystick(JOYSTICK_DEFAULT_REPORT_ID,
-                                 JOYSTICK_TYPE_JOYSTICK, 32, 0,
-                                 true, true, false, false, false, false,
-                                 false, false, false, false, false);
+StickMachine StickMachine::instance;
+StickMachine &StickMachine::getInstance()
+{
+    return instance;
+}
 
-static bool setupOnce = false;
+StickMachine::StickMachine()
+{
+    this->joystick = new Joystick_(JOYSTICK_DEFAULT_REPORT_ID,
+                                   JOYSTICK_TYPE_JOYSTICK, 32, 0,
+                                   true, true, false, false, false, false,
+                                   false, false, false, false, false);
+}
+
+StickMachine::~StickMachine()
+{
+    delete this->joystick;
+}
 
 void StickMachine::setupJoyStick()
 {
-    if (!setupOnce)
-    {
-        setupOnce = true;
+    joystick->setXAxisRange(-127, 127);
+    joystick->setYAxisRange(-127, 127);
+    joystick->begin();
+}
 
-        ButtonState::init();
-
-        joystick.setXAxisRange(-127, 127);
-        joystick.setYAxisRange(-127, 127);
-        joystick.begin();
-    }
+ButtonState& StickMachine::buttonState()
+{
+    return this->buttons;
 }
 
 void StickMachine::handleEvents(vector<ButtonEvent> &events)
@@ -142,12 +149,12 @@ void StickMachine::handleButton(JoyButton jb, SimpleEventType event)
 
     if (event == Pushed)
     {
-        joystick.pressButton(button);
+        joystick->pressButton(button);
         DEBUG("Button", button, "pressed");
     }
     else // if event == Released
     {
-        joystick.releaseButton(button);
+        joystick->releaseButton(button);
         DEBUG("Button", button, "released");
     }
 }
@@ -157,16 +164,16 @@ void StickMachine::handleAxis(JoyButton jb, SimpleEventType event)
     switch (jb)
     {
     case UP:
-        joystick.setYAxis(event == Pushed ? AXIS_MIN : 0);
+        joystick->setYAxis(event == Pushed ? AXIS_MIN : 0);
         break;
     case DOWN:
-        joystick.setYAxis(event == Pushed ? AXIS_MAX : 0);
+        joystick->setYAxis(event == Pushed ? AXIS_MAX : 0);
         break;
     case LEFT:
-        joystick.setXAxis(event == Pushed ? AXIS_MIN : 0);
+        joystick->setXAxis(event == Pushed ? AXIS_MIN : 0);
         break;
     case RIGHT:
-        joystick.setXAxis(event == Pushed ? AXIS_MAX : 0);
+        joystick->setXAxis(event == Pushed ? AXIS_MAX : 0);
         break;
     default:
         break;

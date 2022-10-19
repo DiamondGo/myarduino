@@ -13,23 +13,23 @@ struct ButtonEvent
     SimpleEventType event;
 };
 
+typedef struct ButtonInfo
+{
+    long lastPressed;
+} ButtonInfo;
+
 class ButtonState
 {
 public:
-    ButtonState(JoyButton);
-    bool isHolding() const;
-    bool isTurbo() const;
-    bool hasMacro() const;
-    void handleEvent(long timeInMS, SimpleEventType, vector<ButtonEvent>&);
-
-    static void init();
-    static ButtonState *get(JoyButton);
+    ButtonState();
+    virtual ~ButtonState();
+    bool isHolding(JoyButton) const;
+    bool isTurbo(JoyButton) const;
+    bool hasMacro(JoyButton) const;
+    void handleEvent(long timeInMS, JoyButton, SimpleEventType, vector<ButtonEvent> &);
 
 private:
-    JoyButton button;
-    long downTime;
-
-    static ButtonState *states[];
+    ButtonInfo *buttons[MAX_BUTTON + 1];
 };
 
 enum StickState
@@ -46,12 +46,21 @@ const int AXIS_MIN = -127;
 class StickMachine
 {
 public:
-    static void setupJoyStick();
-    static void handleEvents(vector<ButtonEvent> &);
+    StickMachine();
+    virtual ~StickMachine();
+    void setupJoyStick();
+    void handleEvents(vector<ButtonEvent> &);
+    ButtonState& buttonState();
+    static StickMachine &getInstance();
+
 private:
-    static Joystick_ joystick;
-    static void handleButton(JoyButton, SimpleEventType);
-    static void handleAxis(JoyButton, SimpleEventType);
+    Joystick_ *joystick;
+    ButtonState buttons;
+
+    void handleButton(JoyButton, SimpleEventType);
+    void handleAxis(JoyButton, SimpleEventType);
+
+    static StickMachine instance;
 };
 
 #endif

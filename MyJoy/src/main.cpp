@@ -14,7 +14,7 @@ void setup()
     Serial.begin(4800);
 #endif
 
-    StickMachine::setupJoyStick();
+    StickMachine::getInstance().setupJoyStick();
 }
 
 void loop()
@@ -28,8 +28,7 @@ void loop()
         {
             TRACE("pin", getPinName(pin), "changed to state", eventType == Pushed ? "Pushed" : "Released", "at", now);
             JoyButton butt = Pin2Button(pin);
-            // DEBUG("pin", pin, "to button", butt);
-            ButtonState::get(butt)->handleEvent(now, eventType, buttonEvents);
+            StickMachine::getInstance().buttonState().handleEvent(now, butt, eventType, buttonEvents);
         });
 
     if (buttonEvents.empty())
@@ -37,5 +36,5 @@ void loop()
         return;
     }
 
-    StickMachine::handleEvents(buttonEvents);
+    StickMachine::getInstance().handleEvents(buttonEvents);
 }
