@@ -9,6 +9,7 @@ typedef SimpleEventType ButtonEventType;
 
 enum JoyButton
 {
+    NONE = 0,
     Button1 = 6,
     Button2 = 7,
     Button3 = 11,

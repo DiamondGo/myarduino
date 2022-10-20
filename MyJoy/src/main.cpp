@@ -1,4 +1,4 @@
-#define LOG LEVEL_TRACE
+#define LOG LEVEL_DEBUG
 #include <my/log.h>
 
 #include "Arduino.h"
@@ -19,7 +19,7 @@ void setup()
 
 void loop()
 {
-    long now = millis();
+    long now = AS_TIME(millis());
 
     vector<ButtonEvent> buttonEvents;
 
@@ -28,8 +28,11 @@ void loop()
         {
             TRACE("pin", getPinName(pin), "changed to state", eventType == Pushed ? "Pushed" : "Released", "at", now);
             JoyButton butt = Pin2Button(pin);
-            StickMachine::getInstance().buttonState().handleEvent(now, butt, eventType, buttonEvents);
+            StickMachine::getInstance().getButtonState()->handleButtonEvent(now, butt, eventType, buttonEvents);
         });
+
+    // search for hold button in turbo mode
+    StickMachine::getInstance().handleTurbo(now, buttonEvents);
 
     if (buttonEvents.empty())
     {
