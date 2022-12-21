@@ -1,11 +1,14 @@
 {
-    "cmake.configureOnOpen": false,
-    "files.associations": {
-        "vector": "cpp",
-        "istream": "cpp",
-        "utility": "cpp",
-        "ios": "cpp",
-        "numeric": "cpp",
-        "ostream": "cpp"
-    }
+  "cmake.configureOnOpen": false,
+  "files.associations": {
+    "vector": "cpp",
+    "istream": "cpp",
+    "utility": "cpp",
+    "ios": "cpp",
+    "numeric": "cpp",
+    "ostream": "cpp",
+    "iosfwd": "cpp",
+    "support": "cpp",
+    "algorithm": "cpp"
+  }
 }

@@ -2,12 +2,21 @@
 #include "my/log.h"
 #include "joybutton.h"
 
+ButtonInfo *newButtonInfo()
+{
+    auto b = new ButtonInfo();
+    b->lastPressed = 0;
+    b->turbo = false;
+    b->macro = nullptr;
+    return b;
+}
+
 ButtonState::ButtonState(StickMachine *machine)
 {
     this->machine = machine;
     for (auto jb : ButtonList)
     {
-        buttons[jb] = new ButtonInfo();
+        buttons[jb] = newButtonInfo();
     }
 }
 
@@ -15,6 +24,7 @@ ButtonState::~ButtonState()
 {
     for (auto jb : ButtonList)
     {
+        delete[] buttons[jb]->macro;
         delete buttons[jb];
     }
 }
@@ -24,12 +34,12 @@ bool ButtonState::isHolding(JoyButton jb) const
     return buttons[jb]->lastPressed > 0;
 }
 
-long ButtonState::getPressTime(JoyButton jb) const
+MS ButtonState::getPressTime(JoyButton jb) const
 {
     return buttons[jb]->lastPressed;
 }
 
-void ButtonState::setPressTime(JoyButton jb, long time)
+void ButtonState::setPressTime(JoyButton jb, MS time)
 {
     buttons[jb]->lastPressed = AS_TIME(time);
 }
@@ -41,7 +51,7 @@ bool ButtonState::isTurbo(JoyButton jb) const
 
 bool ButtonState::hasMacro(JoyButton jb) const
 {
-    return buttons[jb]->macro;
+    return buttons[jb]->macro == nullptr;
 }
 
 void ButtonState::setTurbo(JoyButton jb, bool turbo)
@@ -49,12 +59,7 @@ void ButtonState::setTurbo(JoyButton jb, bool turbo)
     buttons[jb]->turbo = turbo;
 }
 
-void ButtonState::setHasMacro(JoyButton jb, bool hasMacro)
-{
-    buttons[jb]->macro = hasMacro;
-}
-
-void ButtonState::handleButtonEvent(long timeInMS, JoyButton jb, SimpleEventType event, vector<ButtonEvent> &output)
+void ButtonState::handleButtonEvent(MS timeInMS, JoyButton jb, SimpleEventType event, vector<ButtonEvent> &output)
 {
     this->machine->stateChangePress(jb, event, timeInMS);
 
@@ -64,9 +69,9 @@ void ButtonState::handleButtonEvent(long timeInMS, JoyButton jb, SimpleEventType
         auto mkey = this->getModifyKey();
         if (mkey != NoMKEY)
         {
-            this->machine->handleModifiedClick(mkey, jb);
+            this->machine->handleModifiedClick(timeInMS, mkey, jb, event);
             // skip normal process
-            // update botton state
+            // update button state
             return;
         }
     }
@@ -76,7 +81,7 @@ void ButtonState::handleButtonEvent(long timeInMS, JoyButton jb, SimpleEventType
     {
         if (lastClick.button == jb && timeInMS - lastClick.time <= DOUBLE_CLICK_INTERVAL)
         {
-            this->machine->handleDoubleClick(jb, output);
+            this->machine->handleDoubleClick(timeInMS, jb, output);
             lastClick.button = NONE;
             lastClick.time = 0;
         }
@@ -102,12 +107,14 @@ void ButtonState::handleButtonEvent(long timeInMS, JoyButton jb, SimpleEventType
         // ignore this, usually in turbo mode
         return;
     }
+
     // output
     output.push_back(
         ButtonEvent{
             timeInMS,
             jb,
             event});
+    TRACE("Button", jb, "triggered", (event == Pushed ? "Pushed" : "Released"), "by user");
 }
 
 StickMachine StickMachine::instance;
@@ -123,14 +130,21 @@ StickMachine::StickMachine()
                                    true, true, false, false, false, false,
                                    false, false, false, false, false);
     this->buttonState = new ButtonState(this);
+    this->recording = new Recording(this);
+
     this->turboState.shouldPush = false;
     this->turboState.lastTime = 0;
+
+    this->state.recordState = NORMAL;
+    this->state.lastTime = 0;
+    this->state.triggerButton = NONE;
 }
 
 StickMachine::~StickMachine()
 {
     delete this->joystick;
     delete this->buttonState;
+    delete this->recording;
 }
 
 void StickMachine::setupJoyStick()
@@ -252,15 +266,25 @@ void StickMachine::handleAxis(JoyButton jb, SimpleEventType event)
     }
 }
 
-void StickMachine::handleDoubleClick(JoyButton jb, vector<ButtonEvent> &output)
+void StickMachine::handleDoubleClick(MS time, JoyButton jb, vector<ButtonEvent> &output)
 {
     switch (jb)
     {
     case FUNC1:
         DEBUG("Double click on Func1, clear all turbo buttons");
-        for (auto jb : ButtonList)
+        for (auto b : ButtonList)
         {
-            this->buttonState->setTurbo(jb, false);
+            if (this->buttonState->isTurbo(b))
+            {
+                this->buttonState->setTurbo(b, false);
+                if (!this->buttonState->isHolding(b) && this->lastSentIsPress.get(b))
+                {
+                    output.push_back(ButtonEvent{
+                        time,
+                        b,
+                        Released});
+                }
+            }
         }
         break;
     case FUNC2:
@@ -287,7 +311,7 @@ MKEY ButtonState::getModifyKey()
     return key;
 }
 
-void StickMachine::handleModifiedClick(MKEY mkey, JoyButton jb)
+void StickMachine::handleModifiedClick(MS now, MKEY mkey, JoyButton jb, SimpleEventType event)
 {
     DEBUG("MKEY", mkey, "with button", jb);
 
@@ -295,19 +319,34 @@ void StickMachine::handleModifiedClick(MKEY mkey, JoyButton jb)
     {
     case M1:
         // TURBO
-        this->buttonState->setTurbo(jb, true);
+        if (event == Released && this->state.recordState == NORMAL)
+        {
+            this->buttonState->setTurbo(jb, true);
+        }
         break;
     case M2:
         break;
     case M3:
+        // Record / Replay
+        if (event == Released &&
+            (this->state.recordState == NORMAL || this->state.recordState == RECORDING))
+        {
+            this->toggleRecord(now, jb);
+        }
         break;
     default:
         break;
     }
 }
 
-void StickMachine::handleTurbo(long time, vector<ButtonEvent> &output)
+void StickMachine::handleTurbo(MS time, vector<ButtonEvent> &output)
 {
+    // don't handle turbo in other modes
+    if (this->state.recordState != NORMAL)
+    {
+        return;
+    }
+
     if (time - this->turboState.lastTime < TURBO_INTERVAL)
     {
         TRACE("time - this->turboState.lastTime is", time - this->turboState.lastTime);
@@ -330,7 +369,7 @@ void StickMachine::handleTurbo(long time, vector<ButtonEvent> &output)
                 AS_SHORT_TIME(time),
                 jb,
                 Pushed});
-            TRACE("Trigger turbo for button", jb, "as Pushed");
+            TRACE("Button", jb, "triggered as Pushed by turbo");
         }
         else if (!this->turboState.shouldPush && lastSentIsPress.get(jb))
         {
@@ -339,7 +378,7 @@ void StickMachine::handleTurbo(long time, vector<ButtonEvent> &output)
                 AS_SHORT_TIME(time),
                 jb,
                 Released});
-            TRACE("Trigger turbo for button", jb, "as Released");
+            TRACE("Button", jb, "triggered as Released by turbo");
         }
     }
 
@@ -353,6 +392,69 @@ void StickMachine::handleTurbo(long time, vector<ButtonEvent> &output)
     }
 }
 
+void StickMachine::toggleRecord(MS now, JoyButton jb)
+{
+    if (now - this->state.lastTime < TREMB_INTERVAL)
+    {
+        return;
+    }
+
+    switch (this->state.recordState)
+    {
+    case NORMAL:
+        this->startRecording(now, jb);
+        break;
+    case RECORDING:
+        this->stopRecording(now);
+        break;
+    default:
+        break;
+    }
+}
+
+void StickMachine::startRecording(MS now, JoyButton jb)
+{
+    if (this->state.recordState != NORMAL)
+    {
+        return;
+    }
+    this->state.recordState = RECORDING;
+    this->state.lastTime = now;
+    this->state.macro.clear();
+    this->state.triggerButton = jb;
+    DEBUG("start recording for button", jb);
+}
+
+void StickMachine::stopRecording(MS now)
+{
+    if (this->state.recordState != RECORDING)
+    {
+        return;
+    }
+    this->state.recordState = NORMAL;
+    this->state.lastTime = now;
+    // TODO: record macro to button
+    this->state.macro.clear();
+    DEBUG("stop recording for button", this->state.triggerButton);
+    this->state.triggerButton = NONE;
+}
+
+void StickMachine::handleReplay(MS time, vector<ButtonEvent> &output)
+{
+    if (this->state.recordState == RECORDING)
+    {
+        if (output.size() == 0 && time - this->state.lastTime >= MAX_COMBO_DURATION)
+        {
+            this->stopRecording(time);
+        }
+    }
+
+    if (this->state.recordState == REPLAYING)
+    {
+        return;
+    }
+}
+
 void StickMachine::stateChangeSent(vector<ButtonEvent> &output)
 {
     for (auto &be : output)
@@ -361,7 +463,7 @@ void StickMachine::stateChangeSent(vector<ButtonEvent> &output)
     }
 }
 
-void StickMachine::stateChangePress(JoyButton jb, SimpleEventType event, long time)
+void StickMachine::stateChangePress(JoyButton jb, SimpleEventType event, MS time)
 {
     this->buttonState->setPressTime(jb, event == Pushed ? time : 0);
 }
@@ -369,4 +471,13 @@ void StickMachine::stateChangePress(JoyButton jb, SimpleEventType event, long ti
 SimpleEventType StickMachine::getLastSentEvent(JoyButton jb)
 {
     return this->lastSentIsPress.get(jb) ? Pushed : Released;
+}
+
+Recording::Recording(StickMachine *machine)
+{
+    this->machine = machine;
+}
+
+Recording::~Recording()
+{
 }

@@ -19,7 +19,7 @@ void setup()
 
 void loop()
 {
-    long now = AS_TIME(millis());
+    auto now = AS_TIME(millis());
 
     vector<ButtonEvent> buttonEvents;
 
@@ -34,10 +34,9 @@ void loop()
     // search for hold button in turbo mode
     StickMachine::getInstance().handleTurbo(now, buttonEvents);
 
-    if (buttonEvents.empty())
-    {
-        return;
-    }
+    // handle replay
+    StickMachine::getInstance().handleReplay(now, buttonEvents);
 
+    // handle interpreted events
     StickMachine::getInstance().handleEvents(buttonEvents);
 }

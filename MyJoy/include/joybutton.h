@@ -6,17 +6,18 @@
 #include "ArduinoSTL.h"
 using namespace std;
 
+#define MS unsigned long
 #define TIME_BIT_LEN 30
 #define SHORT_TIME_BIT_LEN 26
-#define AS_TIME(t) (t & (((long)1 << TIME_BIT_LEN) - 1)) // keep only TIME_BIT_LEN bits
-#define AS_SHORT_TIME(t) (t & (((long)1 << SHORT_TIME_BIT_LEN) - 1))
+#define AS_TIME(t) (t & (((MS)1 << TIME_BIT_LEN) - 1)) // keep only TIME_BIT_LEN bits
+#define AS_SHORT_TIME(t) (t & (((MS)1 << SHORT_TIME_BIT_LEN) - 1))
 
 class StickMachine; // forward declaration
 
 struct ButtonEvent
 {
     // use bit fields to reduce size from 8 to 4 bytes
-    long time : SHORT_TIME_BIT_LEN; // about 18 hours max, should be enough for game player?
+    MS time : SHORT_TIME_BIT_LEN; // about 18 hours max, should be enough for game player?
     JoyButton button : 5;
     SimpleEventType event : 1;
 };
@@ -51,22 +52,23 @@ private:
 
 struct ButtonInfo
 {
-    long lastPressed : TIME_BIT_LEN;
+    MS lastPressed : TIME_BIT_LEN;
     bool turbo : 1;
-    bool macro : 1;
+    // bool macro : 1;
+    ButtonEvent *macro;
 };
 
 struct LastClick
 {
     JoyButton button;
-    long time;
+    MS time;
 };
 
 typedef int MKEY;
 const MKEY NoMKEY = 0;
 const MKEY M1 = 1;
 const MKEY M2 = 1 << 1;
-const MKEY M3 = M1 & M2;
+const MKEY M3 = M1 | M2;
 
 class ButtonState
 {
@@ -74,23 +76,23 @@ public:
     ButtonState(StickMachine *);
     virtual ~ButtonState();
     bool isHolding(JoyButton) const;
-    long getPressTime(JoyButton) const;
-    void setPressTime(JoyButton, long);
+    MS getPressTime(JoyButton) const;
+    void setPressTime(JoyButton, MS);
     bool isTurbo(JoyButton) const;
     void setTurbo(JoyButton, bool);
     bool hasMacro(JoyButton) const;
-    void setHasMacro(JoyButton, bool);
-    void handleButtonEvent(long timeInMS, JoyButton, SimpleEventType, vector<ButtonEvent> &);
+    // void setHasMacro(JoyButton, bool);
+    void handleButtonEvent(MS timeInMS, JoyButton, SimpleEventType, vector<ButtonEvent> &);
     MKEY getModifyKey();
 
 private:
     StickMachine *machine;
     ButtonInfo *buttons[MAX_BUTTON + 1];
     LastClick lastClick;
-    const long DOUBLE_CLICK_INTERVAL = 500;
+    const MS DOUBLE_CLICK_INTERVAL = 500;
 };
 
-enum StickState
+enum WorkingState
 {
     NORMAL,
     TURBO_HOLDING,
@@ -101,6 +103,22 @@ enum StickState
 const int AXIS_MAX = 127;
 const int AXIS_MIN = -127;
 
+class Recording
+{
+public:
+    Recording(StickMachine *);
+    virtual ~Recording();
+    bool startRecording(JoyButton);
+    bool isRecording();
+
+private:
+    const int MAX_RECORD_EVENT = 64;
+    const int MAX_RECORD_START_IDLE_TIME = 5000; // in millisecond
+    const int MAX_RECORD_END_IDLE_TIME = 5000;
+    StickMachine *machine;
+    JoyButton currentRecordButton;
+};
+
 class StickMachine
 {
 public:
@@ -109,12 +127,16 @@ public:
     void setupJoyStick();
     void handleEvents(vector<ButtonEvent> &);
     void handleOutput(vector<ButtonEvent> &);
-    void handleDoubleClick(JoyButton, vector<ButtonEvent> &);
-    void handleModifiedClick(MKEY, JoyButton);
-    void handleTurbo(long, vector<ButtonEvent> &);
+    void handleDoubleClick(MS, JoyButton, vector<ButtonEvent> &);
+    void handleModifiedClick(MS, MKEY, JoyButton, SimpleEventType);
+    void handleTurbo(MS, vector<ButtonEvent> &);
+    void toggleRecord(MS, JoyButton);
+    void startRecording(MS, JoyButton);
+    void stopRecording(MS);
+    void handleReplay(MS, vector<ButtonEvent> &);
     ButtonState *getButtonState();
     void stateChangeSent(vector<ButtonEvent> &);
-    void stateChangePress(JoyButton, SimpleEventType, long);
+    void stateChangePress(JoyButton, SimpleEventType, MS);
     SimpleEventType getLastSentEvent(JoyButton);
 
     static StickMachine &getInstance();
@@ -122,18 +144,28 @@ public:
 private:
     Joystick_ *joystick;
     ButtonState *buttonState;
+    Recording *recording;
     struct
     {
-        long lastTime : TIME_BIT_LEN;
+        MS lastTime : TIME_BIT_LEN;
         ;
         bool shouldPush : 1;
     } turboState;
     ButtonBinaryStatue lastSentIsPress;
+    struct
+    {
+        WorkingState recordState;
+        MS lastTime;
+        JoyButton triggerButton;
+        vector<ButtonEvent> macro;
+    } state;
 
     void handleButton(JoyButton, SimpleEventType);
     void handleAxis(JoyButton, SimpleEventType);
 
-    const long TURBO_INTERVAL = 5;
+    const MS TURBO_INTERVAL = 10;
+    const MS TREMB_INTERVAL = 500;
+    const MS MAX_COMBO_DURATION = 10 * 1000; // 10 seconds
     static StickMachine instance;
 };
 
