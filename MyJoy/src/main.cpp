@@ -15,11 +15,19 @@ void setup()
 #endif
 
     StickMachine::getInstance().setupJoyStick();
+    StickMachine::getInstance().loadState();
 }
 
 void loop()
 {
+    static MS loadTs = 0;
     auto now = AS_TIME(millis());
+
+    if (now - loadTs >= 5000)
+    {
+        StickMachine::getInstance().loadState();
+        loadTs = now;
+    }
 
     vector<ButtonEvent> buttonEvents;
 
@@ -35,7 +43,7 @@ void loop()
     StickMachine::getInstance().handleTurbo(now, buttonEvents);
 
     // handle replay
-    StickMachine::getInstance().handleReplay(now, buttonEvents);
+    StickMachine::getInstance().handleMacro(now, buttonEvents);
 
     // handle interpreted events
     StickMachine::getInstance().handleEvents(buttonEvents);

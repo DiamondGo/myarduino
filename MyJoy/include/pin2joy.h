@@ -22,8 +22,8 @@ enum JoyButton
     DOWN = A4,
     LEFT = A3,
     RIGHT = A2,
-    SELECT = 3,
-    START = 2,
+    SELECT = 2,
+    START = 3,
     FUNC1 = 8,
     FUNC2 = 9,
     MAX_BUTTON = MAX_PIN,
@@ -51,9 +51,8 @@ static const JoyButton ButtonList[] = {
     START,
     FUNC1,
     FUNC2,
-    };
+};
 
 typedef void (*JoystickHandle)(JoyButton, ButtonEventType);
-void processButton();
 
 #endif
