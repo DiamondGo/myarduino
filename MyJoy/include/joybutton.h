@@ -177,6 +177,8 @@ private:
 
     const MS TURBO_INTERVAL = 10;
     const MS TREMBLE_INTERVAL = 500;
+    const MS CANCEL_INTERVAL = 3000;
+
     const MS MAX_COMBO_DURATION = 10 * 1000; // 10 seconds
     const float DEFAULT_SPEEDUP = 1.0;
     static StickMachine instance;
@@ -184,7 +186,20 @@ private:
 
 struct EEPHeader
 {
-    
+    unsigned int macroCount : 6;
+};
+
+struct EEPMacroHeader
+{
+    JoyButton button : 6;
+    size_t location : 10;
+};
+
+struct EEPButtonEvent
+{
+    JoyButton button : 6;
+    bool pressed : 1;
+    MS time : 16;
 };
 
 #endif

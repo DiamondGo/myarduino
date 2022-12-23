@@ -74,11 +74,12 @@ void ButtonState::setMacro(JoyButton jb, vector<ButtonEvent> &macro)
     {
         info->macro = new ButtonEvent[macro.size() + 1];
         MS start = macro[0].time;
+        DEBUG("start is", start);
         ButtonEvent *p = info->macro;
         ButtonEvent *previous = nullptr;
         for (auto it = macro.rbegin(); it != macro.rend(); it++) // in reverse order
         {
-            TRACE("saved macro: button", it->button, "event", it->event, "time", it->time - start);
+            DEBUG("saved macro: button", it->button, "event", it->event, "time", it->time - start);
             if (previous != nullptr)
             {
                 if (previous->time == AS_SHORT_TIME(it->time - start) && previous->button == it->button && previous->event == it->event)
@@ -499,7 +500,7 @@ void StickMachine::stopRecording(MS now)
     }
 
     // record macro to button
-    if (!this->state.macro.empty())
+    if (!this->state.macro.empty() || (now - this->state.changedTime > TREMBLE_INTERVAL && now - this->state.changedTime < CANCEL_INTERVAL))
     {
         this->buttonState->setMacro(this->state.triggerButton, this->state.macro);
     }
@@ -509,6 +510,8 @@ void StickMachine::stopRecording(MS now)
     this->state.macro.clear();
     TRACE("stop recording for button", this->state.triggerButton);
     this->state.triggerButton = NONE;
+
+    this->saveState();
 }
 
 void StickMachine::handleMacro(MS time, vector<ButtonEvent> &output)
@@ -541,7 +544,6 @@ void StickMachine::handleMacro(MS time, vector<ButtonEvent> &output)
         {
             if (it->event == Released && this->buttonState->hasMacro(it->button))
             {
-                TRACE("start replay for button", it->button);
                 this->startReplay(time, it->button, output);
                 it = output.erase(it);
                 break;
@@ -572,11 +574,12 @@ void StickMachine::startReplay(MS now, JoyButton jb, vector<ButtonEvent> &output
             }
         }
         be.time = (MS)(be.time * this->state.speedUp);
+        DEBUG("macro button", be.button, "time", be.time, "event is", be.event);
         this->state.macro.push_back(be);
         macro++;
     }
 
-    TRACE("record contains", this->state.macro.size(), "events");
+    DEBUG("record contains", this->state.macro.size(), "events");
     this->continueReplay(now, output);
 }
 
@@ -588,7 +591,7 @@ void StickMachine::continueReplay(MS now, vector<ButtonEvent> &output)
     {
         auto be = macro.back();
         be.time = now;
-        TRACE("replay button", be.button, "event", be.event);
+        DEBUG("replay button", be.button, "event", be.event);
         output.push_back(be);
         macro.pop_back();
     }
@@ -626,12 +629,116 @@ Recording::~Recording()
 {
 }
 
+void writeEEP(int pos, void *data, int size)
+{
+    for (int i = 0; i < size; i++)
+    {
+        EEPROM.write(pos + i, *((uint8_t *)data + i));
+    }
+}
+
+void readEEP(int pos, void *data, int size)
+{
+    for (int i = 0; i < size; i++)
+    {
+        *((uint8_t *)data + i) = EEPROM.read(pos + i);
+    }
+}
+
 void StickMachine::loadState()
 {
-    DEBUG("load state from eeprom");
-    DEBUG("EEPROM length is", EEPROM.length());
+    DEBUG("in loadState");
+    int eeplen = EEPROM.length();
+    int headpos = 0;
+    int tailpos = eeplen;
+
+    EEPHeader h;
+    readEEP(headpos, &h, sizeof(h));
+    headpos += sizeof(h);
+
+    for (int i = 0; i < h.macroCount; i++)
+    {
+        EEPMacroHeader mh;
+        readEEP(headpos, &mh, sizeof(mh));
+        headpos += sizeof(mh);
+        DEBUG("load macro for button", mh.button, "location is", mh.location);
+
+        vector<ButtonEvent> macro;
+        // for (int j = 0; int(mh.location + j * sizeof(EEPButtonEvent)) < tailpos; j++)
+        for (int j = 1; tailpos - j * sizeof(EEPButtonEvent) >= mh.location; j++)
+        {
+            EEPButtonEvent ebe;
+            readEEP(tailpos - j * sizeof(EEPButtonEvent), &ebe, sizeof(ebe));
+            ButtonEvent be;
+            be.button = ebe.button;
+            be.time = ebe.time;
+            be.event = ebe.pressed ? Pushed : Released;
+            macro.push_back(be);
+            DEBUG("read event for button", be.button, "time is", be.time, "event type is", be.event);
+        }
+        tailpos = mh.location;
+
+        this->buttonState->setMacro(mh.button, macro);
+    }
+
+    INFO("load macro for", h.macroCount, "buttons");
 }
 
 void StickMachine::saveState()
 {
+    int eeplen = EEPROM.length();
+    int headpos = 0;
+    int tailpos = eeplen;
+
+    // get macro count
+    int macroCount = 0;
+    for (auto jb : ButtonList)
+    {
+        if (this->getButtonState()->hasMacro(jb))
+        {
+            macroCount++;
+        }
+    }
+
+    EEPHeader h;
+    h.macroCount = macroCount;
+    writeEEP(headpos, &h, sizeof(h));
+    headpos += sizeof(h);
+
+    for (auto jb : ButtonList)
+    {
+        if (this->getButtonState()->hasMacro(jb))
+        {
+            DEBUG("save macro for button", jb)
+            EEPMacroHeader mh;
+            mh.button = jb;
+
+            ButtonEvent *macro = this->getButtonState()->getMacro(jb);
+            int beCount = 0;
+            while ((macro + beCount) != nullptr && (macro + beCount)->button != NONE)
+            {
+                beCount++;
+            }
+            mh.location = tailpos - beCount * sizeof(EEPButtonEvent);
+            DEBUG("event count is", beCount, "location is", mh.location, "/", tailpos);
+            tailpos = mh.location;
+
+            // write macro header
+            writeEEP(headpos, &mh, sizeof(mh));
+            headpos += sizeof(mh);
+
+            for (int i = 0; i < beCount; i++)
+            {
+                ButtonEvent &be = macro[i];
+                EEPButtonEvent ebe;
+                ebe.button = be.button;
+                ebe.pressed = (be.event == Pushed);
+                ebe.time = be.time;
+                writeEEP(tailpos + i * sizeof(EEPButtonEvent), &ebe, sizeof(ebe));
+                DEBUG("write event to eeprom, button", ebe.button, ", event", ebe.pressed, ", time", ebe.time);
+            }
+        }
+    }
+
+    INFO("save", macroCount, "macros to eeprom");
 }

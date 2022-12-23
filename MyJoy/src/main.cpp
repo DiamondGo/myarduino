@@ -1,4 +1,4 @@
-#define LOG LEVEL_DEBUG
+#define LOG LEVEL_INFO
 #include <my/log.h>
 
 #include "Arduino.h"
@@ -20,14 +20,20 @@ void setup()
 
 void loop()
 {
-    static MS loadTs = 0;
     auto now = AS_TIME(millis());
 
+    /*
+    static MS loadTs = 0;
+    if (loadTs == 0)
+    {
+        loadTs = now;
+    }
     if (now - loadTs >= 5000)
     {
         StickMachine::getInstance().loadState();
         loadTs = now;
     }
+    */
 
     vector<ButtonEvent> buttonEvents;
 
